@@ -1,0 +1,396 @@
+
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kviz – Učenik</title>
+<style>
+  :root{
+    --primary:#0984e3;
+    --bg:#f5f7fb;
+    --good:#2ecc71;
+    --warn:#e67e22;
+    --danger:#e74c3c;
+  }
+  body { font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+  #box { max-width: 860px; margin: auto; background: #fff; padding: 25px; border-radius: 12px;
+         box-shadow: 0 10px 25px rgba(0,0,0,.15); }
+  .row { margin-bottom: 12px; }
+  input, select { padding: 10px; border: 1px solid #ddd; border-radius: 8px; width: 100%; max-width: 360px; }
+  button { padding:10px 18px; border:none; border-radius:8px; background:var(--primary); color:#fff; cursor:pointer;
+           transition: transform .15s ease, box-shadow .15s ease; }
+  button:hover { transform: translateY(-1px); box-shadow: 0 6px 12px rgba(0,0,0,.12); }
+  button:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(0,0,0,.10); }
+  button:disabled { background:#bbb; cursor:not-allowed; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  .muted { color:#666; }
+
+  /* Tajmeri – veći font + efekti */
+  #timers {
+    display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+    margin: 8px 0 12px;
+  }
+  .timer {
+    font-size: 26px; font-weight: 800; letter-spacing: 0.5px;
+    text-shadow: 0 0 6px rgba(9,132,227,0.35);
+  }
+  .timer .label { font-size: 14px; font-weight: 600; color:#555; display:block; margin-bottom:2px; }
+  #globalTimerValue { color: var(--primary); }
+  #questionTimerValue { color: var(--good); }
+  .pulse {
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); text-shadow: 0 0 6px rgba(231,76,60,0.4); }
+    50% { transform: scale(1.03); text-shadow: 0 0 12px rgba(231,76,60,0.65); }
+    100% { transform: scale(1); text-shadow: 0 0 6px rgba(231,76,60,0.4); }
+  }
+
+  /* Pitanje i brojač – lijevo */
+  #counter { font-weight:700; margin-top:8px; text-align:left; }
+  #question { text-align: left; margin: 8px 0; }
+
+  /* --- RAVNANJE RADIO TAČKICE I TEKSTA (GRID) --- */
+  .answers-rail {
+    display: block;
+    text-align: left;
+    max-width: 520px;
+    margin-left: 0;
+    padding-left: 0;
+  }
+  .answers-rail .answer {
+    display: grid;
+    grid-template-columns: 22px 1fr; /* lijevo radio, desno tekst */
+    column-gap: 12px;
+    align-items: center;
+
+    background: #eef4ff;
+    margin: 8px 0;
+    padding: 12px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background .15s ease, transform .15s ease;
+  }
+  .answers-rail .answer:hover { background: #e4edff; transform: translateX(2px); }
+  .answers-rail .answer.selected { background: #bcd4ff; color: #04274f; }
+  .answers-rail .answer input[type="radio"] {
+    margin: 0;
+    width: 18px; height: 18px;
+    accent-color: #0984e3; /* boja tačkice (moderni browseri) */
+  }
+  .answers-rail .answer .opt-text {
+    display: block;
+    line-height: 1.35;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* Rezultat – veći font + efekti */
+  #done h3 { font-size: 28px; margin-bottom: 6px; }
+  .bigStat { font-size: 26px; font-weight: 900; margin: 6px 0; }
+  .bigStat .value { color: var(--primary); text-shadow: 0 0 10px rgba(9,132,227,0.25); }
+  .bigStat.ok { color: var(--good); }
+  .bigStat.warn { color: var(--warn); }
+  .bigStat.bad { color: var(--danger); }
+
+  /* Napredak */
+  #progress { height: 8px; background:#eee; border-radius:6px; overflow: hidden; margin: 6px 0 14px; }
+  #bar { height:8px; width:0%; background:var(--primary); transition: width .3s ease; }
+
+  /* Dugmad na suprotnim stranama */
+  .controls.split {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    justify-content: space-between;
+  }
+  .controls.split .left,
+  .controls.split .right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  button.primary { background: var(--primary); }
+  button.success { background: #10b981; } /* zelena: Predaj test */
+</style>
+</head>
+<body>
+<div id="box">
+  <h2>Kontrolni iz informatike – Učenik</h2>
+
+  <!-- Forma -->
+  <div id="form">
+    <div class="row">
+      <label for="ime">Prezime i ime</label><br>
+      <input id="ime" placeholder="npr. Anić Ana" />
+    </div>
+    <div class="row">
+      <label for="razred">Razred</label><br>
+      <select id="razred">
+        <option value="">-- odaberi --</option>
+        <option>6a</option>
+        <option>6b</option>
+        <option>6c</option>
+      </select>
+    </div>
+    <div class="controls">
+      <button id="startBtn">Započni kviz</button>
+      <span id="msg" style="color:red;"></span>
+    </div>
+  </div>
+
+  <!-- Kviz -->
+  <div id="quiz" style="display:none;">
+    <div id="timers">
+      <div class="timer">
+        <span class="label">Vrijeme izrade</span>
+        <span id="globalTimerValue">00:00</span>
+      </div>
+      <div class="timer">
+        <span class="label">Vrijeme pitanja</span>
+        <span id="questionTimerValue">60 s</span>
+      </div>
+    </div>
+
+    <div id="counter"></div>
+    <div id="progress"><div id="bar"></div></div>
+
+    <h3 id="question"></h3>
+
+    <!-- Odgovori grupisani lijevo (radio + tekst u gridu) -->
+    <div class="answers-rail">
+      <div id="answers"></div>
+    </div>
+
+    <!-- Dugmad: lijevo Next, desno Predaj -->
+    <div class="controls split">
+      <div class="left">
+        <button id="nextBtn" class="primary" disabled>Sljedeće pitanje</button>
+      </div>
+      <div class="right">
+        <span id="hint" class="muted"></span>
+        <button id="submitBtn" class="success">Predaj test</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kraj -->
+  <div id="done"></div>
+</div>
+
+<!-- Pitanja + ključ -->
+<script src="questions.js"></script>
+<script>
+/* ===== Utils ===== */
+const shuffle = (arr) => arr.map(v=>({v,k:Math.random()})).sort((a,b)=>a.k-b.k).map(o=>o.v);
+const escapeHTML = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+const pad2 = n => String(n).padStart(2,'0');
+const fmtMMSS = sec => `${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
+
+/* ===== State ===== */
+const pitanja = window.QUESTION_SET.slice();        // kopija
+const KEY = window.QUESTION_SET.map(x => x.c);      // ključ tačnih odgovora
+const PTS = window.POINTS_PER_CORRECT || 3;
+
+let idx = 0;
+let answers = [];                    // niz odabranih indeksa (po originalnim indeksima)
+let student = { ime:"", razred:"" };
+let currentOpts = [];                // mapiranje prikaza na originalne indekse
+let globalStart = null;              // Date.now()
+let globalTimer = null;              // setInterval za globalno vrijeme
+let elapsedSec = 0;                  // ukupno proteklo vrijeme
+let qTimer = null;                   // setInterval za pitanje
+let qRemain = 60;                    // preostale sekunde za pitanje
+
+/* ===== Elements ===== */
+const el = {
+  form: document.getElementById('form'),
+  ime: document.getElementById('ime'),
+  razred: document.getElementById('razred'),
+  startBtn: document.getElementById('startBtn'),
+  msg: document.getElementById('msg'),
+
+  quiz: document.getElementById('quiz'),
+  globalTimerValue: document.getElementById('globalTimerValue'),
+  questionTimerValue: document.getElementById('questionTimerValue'),
+  counter: document.getElementById('counter'),
+  bar: document.getElementById('bar'),
+  question: document.getElementById('question'),
+  answers: document.getElementById('answers'),
+  nextBtn: document.getElementById('nextBtn'),
+  submitBtn: document.getElementById('submitBtn'),
+  hint: document.getElementById('hint'),
+
+  done: document.getElementById('done')
+};
+
+/* ===== Init ===== */
+el.startBtn.addEventListener('click', start);
+el.nextBtn.addEventListener('click', next);
+el.submitBtn.addEventListener('click', () => finish(true)); // predaja prije kraja
+
+function start(){
+  const ime = el.ime.value.trim();
+  const raz = el.razred.value;
+  if(!ime){ el.msg.textContent = "Unesi prezime i ime."; el.ime.focus(); return; }
+  if(!raz){ el.msg.textContent = "Odaberi razred."; el.razred.focus(); return; }
+  el.msg.textContent = "";
+
+  student.ime = ime; student.razred = raz;
+
+  shuffle(pitanja);
+  idx = 0; answers = [];
+  elapsedSec = 0;
+
+  el.form.style.display = 'none';
+  el.quiz.style.display = 'block';
+  el.done.innerHTML = '';
+
+  startGlobalTimer();
+  showQ();
+}
+
+/* ===== Timers ===== */
+function startGlobalTimer(){
+  globalStart = Date.now();
+  clearInterval(globalTimer);
+  el.globalTimerValue.textContent = "00:00";
+  globalTimer = setInterval(() => {
+    elapsedSec = Math.floor((Date.now() - globalStart)/1000);
+    el.globalTimerValue.textContent = fmtMMSS(elapsedSec);
+  }, 250);
+}
+
+function startQuestionTimer(){
+  qRemain = 60;
+  updateQuestionTimerVisual();
+  clearInterval(qTimer);
+  qTimer = setInterval(() => {
+    qRemain--;
+    updateQuestionTimerVisual();
+    if(qRemain <= 0){
+      clearInterval(qTimer);
+      // Ako nije odabrano – ostaje undefined i prelazimo dalje
+      next(/*dueToTimeout*/true);
+    }
+  }, 1000);
+}
+
+function updateQuestionTimerVisual(){
+  el.questionTimerValue.textContent = `${qRemain} s`;
+  // Efekti pri kraju
+  if(qRemain <= 10){
+    el.questionTimerValue.style.color = 'var(--danger)';
+    el.questionTimerValue.classList.add('pulse');
+  } else if(qRemain <= 20){
+    el.questionTimerValue.style.color = 'var(--warn)';
+    el.questionTimerValue.classList.remove('pulse');
+  } else {
+    el.questionTimerValue.style.color = 'var(--good)';
+    el.questionTimerValue.classList.remove('pulse');
+  }
+}
+
+/* ===== Rendering pitanja ===== */
+function showQ(){
+  el.nextBtn.disabled = true;
+  el.hint.textContent = "(Odaberi odgovor ili sačekaj istek vremena za automatski prelaz.)";
+
+  el.counter.textContent = `Pitanje ${idx+1}/${pitanja.length}`;
+  const progress = Math.round((idx) / pitanja.length * 100);
+  el.bar.style.width = `${progress}%`;
+
+  el.question.innerHTML = escapeHTML(pitanja[idx].q);
+  currentOpts = pitanja[idx].a.map((t,i)=>({t,i}));
+  currentOpts = shuffle(currentOpts);
+
+  el.answers.innerHTML = '';
+  currentOpts.forEach((o, i) => {
+    const lab = document.createElement('label');
+    lab.className = 'answer';
+    lab.innerHTML = `
+      <input type="radio" name="opt" aria-label="Opcija">
+      <span class="opt-text">${escapeHTML(o.t)}</span>
+    `;
+    lab.addEventListener('click', () => select(i));
+    el.answers.appendChild(lab);
+  });
+
+  clearInterval(qTimer);
+  startQuestionTimer();
+}
+
+function select(i){
+  [...document.querySelectorAll('.answers-rail .answer')].forEach(x=>x.classList.remove('selected'));
+  document.querySelectorAll('.answers-rail .answer')[i].classList.add('selected');
+
+  // Sačuvaj odabrani odgovor u odnosu na originalni indeks
+  answers[idx] = currentOpts[i].i;
+  el.nextBtn.disabled = false;
+}
+
+/* ===== Napredovanje ===== */
+function next(dueToTimeout = false){
+  clearInterval(qTimer);
+  idx++;
+  if(idx < pitanja.length){
+    showQ();
+  } else {
+    finish(false);
+  }
+}
+
+/* ===== Kraj kviza ===== */
+function finish(early){
+  clearInterval(qTimer);
+  clearInterval(globalTimer);
+
+  // Izračun broja tačnih (za prikaz učeniku) – bez otkrivanja koji su tačni:
+  let correct = 0;
+  for(let i=0;i<KEY.length;i++){
+    if(answers[i] === KEY[i]) correct++;
+  }
+  const max = KEY.length * PTS;
+  const score = correct * PTS;
+  const percent = Math.round((score / max) * 100);
+  const grade = (window.gradeFromPercent ? window.gradeFromPercent(percent)
+               : (percent <= 29 ? 1 : percent <= 45 ? 2 : percent <= 66 ? 3 : percent <= 88 ? 4 : 5));
+
+  // Sačuvaj u localStorage – čuvamo SAMO odgovore + meta
+  const now = new Date();
+  const dt = `${pad2(now.getDate())}.${pad2(now.getMonth()+1)}.${now.getFullYear()} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  const payload = {
+    name: student.ime,
+    className: student.razred,
+    answers,              // npr. [0,2,1,...] ili undefined kad nije odgovoreno
+    createdAt: now.toISOString(),
+    displayTime: dt,
+    durationSec: elapsedSec
+  };
+  const storageKey = 'kviz_rezultati';
+  const arr = JSON.parse(localStorage.getItem(storageKey) || '[]');
+  arr.push(payload);
+  localStorage.setItem(storageKey, JSON.stringify(arr));
+
+  // Prikaz rezultata učeniku (bez otkrivanja gdje je pogriješio)
+  const elapsedText = fmtMMSS(elapsedSec);
+  const gradeClass = grade >= 4 ? 'ok' : grade === 3 ? 'warn' : 'bad';
+
+  el.quiz.style.display = 'none';
+  el.done.innerHTML = `
+    <h3>Test je predan ${early ? "(ranije)" : ""}</h3>
+    <p class="bigStat"><span class="label">Vrijeme rješavanja:</span> <span class="value">${elapsedText}</span></p>
+    <p class="bigStat"><span class="label">Tačnih odgovora:</span> <span class="value">${correct}/${KEY.length}</span></p>
+    <p class="bigStat"><span class="label">Bodovi:</span> <span class="value">${score}/${max} (${percent}%)</span></p>
+    <p class="bigStat ${gradeClass}"><span class="label">Ocjena:</span> <span class="value">${grade}</span></p>
+    <div class="controls">
+      <button onclick="location.reload()">Novi pokušaj</button>
+    </div>
+    <p class="muted">Napomena: Detalji po pitanjima nisu prikazani.</p>
+  `;
+}
+</script>
+</body>
+</html>

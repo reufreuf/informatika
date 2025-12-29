@@ -1,0 +1,175 @@
+
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kviz – Nastavnik</title>
+<style>
+  body { font-family: "Segoe UI", Arial, sans-serif; background:#f6f8fc; margin:0; padding:20px; }
+  #box { max-width: 960px; margin:auto; background:#fff; padding:24px; border-radius:12px;
+         box-shadow:0 10px 25px rgba(0,0,0,.15); }
+  table { border-collapse: collapse; width:100%; margin-top:12px; }
+  th, td { border-bottom:1px solid #ddd; text-align:center; padding:10px; }
+  th { background:#0984e3; color:#fff; }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  input[type=password], input[type=text] { padding:10px; border:1px solid #ddd; border-radius:8px; }
+  button { padding:10px 18px; border:none; border-radius:8px; background:#0984e3; color:#fff; cursor:pointer;
+           transition: transform .15s ease, box-shadow .15s ease; }
+  button:hover { transform: translateY(-1px); box-shadow: 0 6px 12px rgba(0,0,0,.12); }
+  button:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(0,0,0,.10); }
+  button:disabled { background:#bbb; cursor:not-allowed; }
+  .muted { color:#666; }
+</style>
+<!-- PDF biblioteke preko CDN-a (ako želiš offline, preuzmi ih i referenciraj lokalno). -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="questions.js"></script>
+</head>
+<body>
+<div id="box">
+  <h2>Rezultati kviza – Nastavnik</h2>
+
+  <!-- Jednostavna lokalna "lozinka" (za testiranje; promijeni je) -->
+  <div id="gate">
+    <p class="muted">Unesi lozinku za pristup:</p>
+    <input id="pwd" type="password" placeholder="Lozinka">
+    <button id="unlockBtn">Otvori</button>
+    <span id="msg" style="color:red; margin-left:8px;"></span>
+  </div>
+
+  <div id="app" style="display:none;">
+    <div class="controls">
+      <button id="refreshBtn">Osvježi</button>
+      <button id="pdfBtn">Izvezi u PDF</button>
+      <button id="clearBtn">Obriši sve rezultate</button>
+    </div>
+
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Prezime i ime</th>
+          <th>Razred</th>
+          <th>Datum i vrijeme</th>
+          <th>Bodovi</th>
+          <th>Ocjena</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <p class="muted" id="stats"></p>
+  </div>
+</div>
+
+<script>
+const key = 'kviz_rezultati';
+const ANSWERS = window.QUESTION_SET.map(x => x.c);
+const POINTS = window.POINTS_PER_CORRECT;
+const gradeFromPercent = window.gradeFromPercent;
+
+const el = {
+  gate: document.getElementById('gate'),
+  pwd: document.getElementById('pwd'),
+  unlockBtn: document.getElementById('unlockBtn'),
+  msg: document.getElementById('msg'),
+  app: document.getElementById('app'),
+  tbody: document.querySelector('#tbl tbody'),
+  refreshBtn: document.getElementById('refreshBtn'),
+  pdfBtn: document.getElementById('pdfBtn'),
+  clearBtn: document.getElementById('clearBtn'),
+  stats: document.getElementById('stats')
+};
+
+// Promijeni lokalnu lozinku po želji
+const LOCAL_PASSWORD = "nastavnik123";
+
+el.unlockBtn.addEventListener('click', ()=>{
+  if(el.pwd.value === LOCAL_PASSWORD){
+    el.gate.style.display = 'none';
+    el.app.style.display = 'block';
+    loadResults();
+  }else{
+    el.msg.textContent = "Pogrešna lozinka.";
+  }
+});
+
+el.refreshBtn.addEventListener('click', loadResults);
+el.clearBtn.addEventListener('click', ()=>{
+  if(confirm("Sigurno obrisati sve lokalne rezultate?")){
+    localStorage.removeItem(key);
+    loadResults();
+  }
+});
+
+function scoreFor(answersArr){
+  let s = 0;
+  for(let i=0;i<ANSWERS.length;i++){
+    if(answersArr && answersArr[i] === ANSWERS[i]) s += POINTS;
+  }
+  return s;
+}
+
+function fmt(dtIso){
+  try {
+    const d = new Date(dtIso);
+    const pad = x => String(x).padStart(2,'0');
+    return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return dtIso; }
+}
+
+function escapeHTML(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
+
+function loadResults(){
+  el.tbody.innerHTML = '';
+  const arr = JSON.parse(localStorage.getItem(key) || '[]');
+  // Najnoviji na vrh
+  arr.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+
+  let totalScore = 0;
+  const max = ANSWERS.length * POINTS;
+  let count = 0;
+
+  arr.forEach(x=>{
+    const score = scoreFor(x.answers || []);
+    const percent = Math.round(score / max * 100);
+    const grade = gradeFromPercent(percent);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHTML(x.name||'')}</td>
+      <td>${escapeHTML(x.className||'')}</td>
+      <td>${escapeHTML(x.displayTime || fmt(x.createdAt||''))}</td>
+      <td>${score}</td>
+      <td>${grade}</td>
+    `;
+    el.tbody.appendChild(tr);
+    totalScore += score; count++;
+  });
+
+  // Statistika
+  const avg = count ? (totalScore / count).toFixed(2) : 0;
+  el.stats.textContent = `Broj zapisa: ${count} | Prosjek bodova: ${avg} / ${max}`;
+}
+
+// PDF izvoz
+el.pdfBtn.addEventListener('click', ()=>{
+  const rows = [];
+  document.querySelectorAll('#tbl tbody tr').forEach(tr=>{
+    const cells = [...tr.children].map(td => td.innerText);
+    rows.push(cells);
+  });
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'pt');
+  doc.text("Rezultati kviza", 40, 40);
+  doc.autoTable({
+    startY: 60,
+    head: [["Prezime i ime","Razred","Datum i vrijeme","Bodovi","Ocjena"]],
+    body: rows,
+    styles: { fontSize: 10 }
+  });
+  doc.save("rezultati.pdf");
+});
+</script>
+</body>
+</html>
